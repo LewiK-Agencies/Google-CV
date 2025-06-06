@@ -1,0 +1,127 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Report - DailyJobs.co.ke</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .notification-banner { display: none; opacity: 0; transition: opacity 0.5s ease-in-out; }
+        .notification-banner.show { display: block; opacity: 1; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="index.html" class="text-2xl font-bold text-gray-800">Daily Jobs</a>
+            <div class="space-x-6">
+                <a href="cover-letter-generator.html" class="text-gray-600 font-semibold hover:text-green-600">Application Letter</a>
+                <a href="ats-checker.html" class="text-gray-600 font-semibold hover:text-green-600">ATS Checker</a>
+                <a href="https://dailyjobs.co.ke/" class="text-gray-600 font-semibold hover:text-green-600">Explore Jobs</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-4 sm:p-6 max-w-3xl">
+        <h2 class="text-xl sm:text-3xl font-semibold text-center mb-6 text-gray-800" data-aos="fade-up">Your ATS Report</h2>
+        <div id="notificationBanner" class="notification-banner bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded-lg text-center" data-aos="fade-up">
+            <p class="font-semibold">Successfully Downloaded Your ATS Report!</p>
+        </div>
+        <div id="reportSection" class="bg-white p-4 sm:p-8 rounded-lg shadow-lg" data-aos="fade-up">
+            <h3 class="text-lg font-semibold text-gray-800 text-center mb-4">ATS Score: <span id="atsScore" class="text-green-600"></span>/100</h3>
+            <div id="feedback" class="mt-4 space-y-2"></div>
+            <button id="downloadReportBtn" class="block w-full max-w-xs mx-auto bg-green-600 text-white p-3 rounded hover:bg-green-700 text-sm sm:text-base mt-6">Download Report PDF</button>
+            <div class="mt-6 flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="https://dailyjobs.co.ke/" class="bg-gray-600 text-white p-3 rounded hover:bg-gray-700 text-sm sm:text-base">Return to Daily Jobs</a>
+                <a href="cover-letter-generator.html" class="bg-gray-600 text-white p-3 rounded hover:bg-green-700 text-sm sm:text-base">Generate Cover Letter</a>
+            </div>
+        </div>
+        <div id="errorSection" class="bg-white p-4 sm:p-8 rounded-lg shadow-lg text-center hidden" data-aos="fade-up">
+            <p class="text-red-600 text-sm sm:text-base">No ATS report found. Please check your resume first.</p>
+            <a href="ats-checker.html" class="block w-full max-w-xs mx-auto bg-blue-600 text-white p-3 rounded hover:bg-blue-700 text-center mt-4 text-sm sm:text-base">Return to ATS Checker</a>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        AOS.init({ duration: 1000 });
+        const { jsPDF } = window.jspdf;
+
+        const atsData = JSON.parse(localStorage.getItem('atsScore') || '{}');
+        const score = atsData.score || 0;
+        const feedback = atsData.feedback || [];
+
+        if (!score) {
+            document.getElementById('reportSection').classList.add('hidden');
+            document.getElementById('errorSection').classList.remove('hidden');
+        } else {
+            document.getElementById('atsScore').textContent = score;
+            document.getElementById('feedback').innerHTML = feedback.map(item => `<p class="text-sm text-gray-600">${item}</p>`).join('');
+            document.getElementById('downloadReportBtn').addEventListener('click', () => {
+                const doc = new jsPDF();
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(12);
+                doc.text('ATS Report', 105, 20, { align: 'center' });
+                doc.setFontSize(16);
+                doc.text(`Score: ${score}/100`, 105, 40, { align: 'center' });
+                doc.setFontSize(12);
+                let y = 60;
+                doc.text('Feedback:', 20, y);
+                y += 10;
+                feedback.forEach((item, index) => {
+                    const lines = doc.splitTextToSize(`${index + 1}. ${item}`, 170);
+                    doc.text(lines, 20, y);
+                    y += lines.length * 10;
+                });
+                doc.save('ATS_Report.pdf');
+                document.getElementById('notificationBanner').classList.add('show');
+                setTimeout(() => localStorage.removeItem('atsScore'), 1000);
+            });
+        }
+    </script>
+</body>
+</html>

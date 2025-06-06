@@ -1,0 +1,232 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Checker - DailyJobs.co.ke</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .progress-bar { transition: width 0.5s ease-in-out; }
+        .score-circle { transition: all 1s ease-in-out; }
+        .payment-banner { background: linear-gradient(135deg, #00A651 0%, #1e40af 100%); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="index.html" class="text-2xl font-bold text-gray-800">Daily Jobs</a>
+            <div class="space-x-6">
+                <a href="cover-letter-generator.html" class="text-gray-600 font-semibold hover:text-green-600">Application Letter</a>
+                <a href="ats-checker.html" class="text-gray-600 font-semibold hover:text-green-600">ATS Checker</a>
+                <a href="https://dailyjobs.co.ke/" class="text-gray-600 font-semibold hover:text-green-600">Explore Jobs</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Section -->
+    <section class="py-16">
+        <div class="container mx-auto px-4 max-w-3xl">
+            <h2 class="text-xl sm:text-3xl font-semibold text-center mb-6 text-gray-800" data-aos="fade-up">ATS Checker</h2>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-gray-200 rounded-full h-4 mb-8" data-aos="fade-up">
+                <div id="progressBar" class="progress-bar bg-green-600 h-4 rounded-full" style="width: 0%"></div>
+            </div>
+
+            <div class="bg-white p-4 sm:p-8 rounded-lg shadow-lg">
+                <p class="text-center text-gray-600 mb-4" data-aos="fade-up">Upload your resume or paste your content to check ATS compatibility.</p>
+                <form id="atsForm" class="space-y-4">
+                    <div>
+                        <label for="jobTitle" class="block text-sm font-medium text-gray-700">Job Title</label>
+                        <input type="text" id="jobTitle" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder="e.g., Software Engineer" required>
+                    </div>
+                    <div>
+                        <label for="cvUpload" class="block text-sm font-medium text-gray-700">Upload Your CV (PDF/TXT)</label>
+                        <input type="file" id="cvUpload" accept=".pdf,.txt" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="content" class="block text-sm font-medium text-gray-700">Or Paste Your Resume/Cover Letter</label>
+                        <textarea id="content" rows="10" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700">Check ATS Compatibility</button>
+                </form>
+                <div id="results" class="mt-6 hidden" data-aos="fade-up">
+                    <h3 class="text-lg font-semibold text-gray-800 text-center">Your ATS Score</h3>
+                    <div class="flex justify-center my-6">
+                        <div class="relative">
+                            <svg class="score-circle w-40 h-40">
+                                <circle cx="80" cy="80" r="70" stroke="#e5e7eb" stroke-width="10" fill="none"/>
+                                <circle id="scoreCircle" cx="80" cy="80" r="70" stroke="#00A651" stroke-width="10" fill="none" stroke-dasharray="439.8" stroke-dashoffset="439.8"/>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span id="atsScore" class="text-3xl font-bold text-green-600">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="feedback" class="mt-4 space-y-2"></div>
+                    <div id="paymentSection" class="payment-banner text-white p-6 rounded-lg mt-4 text-center">
+                        <p class="mb-4">Pay Ksh 17 via M-PESA to unlock your detailed ATS report.</p>
+                        <button id="payNowBtn" class="bg-white text-green-600 font-semibold py-2 px-4 rounded hover:bg-gray-100">Pay Now</button>
+                        <p id="paymentError" class="text-red-300 mt-2 hidden">Payment failed. Please try again.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="https://dailyjobs.co.ke/" class="bg-gray-600 text-white p-3 rounded hover:bg-gray-700 text-sm sm:text-base">Return to Daily Jobs</a>
+                <a href="cover-letter-generator.html" class="bg-gray-600 text-white p-3 rounded hover:bg-green-700 text-sm sm:text-base">Generate Cover Letter</a>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script>
+        AOS.init({ duration: 1000 });
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+
+        const atsForm = document.getElementById('atsForm');
+        const resultsDiv = document.getElementById('results');
+        const atsScoreSpan = document.getElementById('atsScore');
+        const scoreCircle = document.getElementById('scoreCircle');
+        const feedbackDiv = document.getElementById('feedback');
+        const progressBar = document.getElementById('progressBar');
+        const payNowBtn = document.getElementById('payNowBtn');
+        const paymentError = document.getElementById('paymentError');
+
+        const keywordLists = {
+            'software engineer': ['javascript', 'python', 'java', 'sql', 'agile', 'git', 'aws', 'docker', 'react', 'node.js'],
+            'accountant': ['excel', 'quickbooks', 'financial reporting', 'tax', 'auditing', 'budgeting', 'sap', 'ifrs', 'payroll', 'reconciliation'],
+            'marketing manager': ['seo', 'sem', 'google analytics', 'content marketing', 'social media', 'branding', 'campaign management', 'email marketing', 'market research', 'crm']
+        };
+
+        let progress = 0;
+        const updateProgress = () => {
+            progress = 0;
+            if (document.getElementById('jobTitle').value.trim()) progress += 50;
+            if (document.getElementById('cvUpload').files.length > 0 || document.getElementById('content').value.trim()) progress += 50;
+            progressBar.style.width = `${progress}%`;
+        };
+
+        document.getElementById('jobTitle').addEventListener('input', updateProgress);
+        document.getElementById('cvUpload').addEventListener('change', updateProgress);
+        document.getElementById('content').addEventListener('input', updateProgress);
+
+        async function extractTextFromPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(' ') + '\n';
+            }
+            return text;
+        }
+
+        atsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            let content = document.getElementById('content').value.toLowerCase();
+            const cvFile = document.getElementById('cvUpload').files[0];
+
+            if (cvFile) {
+                if (cvFile.type === 'application/pdf') {
+                    content = await extractTextFromPDF(cvFile);
+                } else if (cvFile.type === 'text/plain') {
+                    content = await cvFile.text();
+                }
+                document.getElementById('content').value = content;
+            }
+
+            const jobTitle = document.getElementById('jobTitle').value.toLowerCase();
+            let score = 0;
+            const feedback = [];
+
+            let keywords = keywordLists[jobTitle] || [];
+            if (!keywords.length) {
+                keywords = keywordLists['software engineer'];
+                feedback.push('Job title not recognized. Using default keywords for Software Engineer.');
+            }
+            const keywordMatches = keywords.filter(keyword => content.includes(keyword));
+            const keywordScore = (keywordMatches.length / keywords.length) * 50;
+            score += keywordScore;
+            feedback.push(`Found ${keywordMatches.length}/${keywords.length} relevant keywords: ${keywordMatches.join(', ') || 'None'}.`);
+
+            if (content.includes('•') || content.includes('★') || content.includes('♦')) {
+                feedback.push('Avoid using special characters (e.g., bullets like •, ★) as they may confuse ATS systems.');
+            } else {
+                score += 20;
+            }
+
+            if (content.includes('header') || content.includes('footer')) {
+                feedback.push('Avoid using headers or footers, as ATS may not parse them correctly.');
+            } else {
+                score += 15;
+            }
+
+            if (content.length < 200) {
+                feedback.push('Content is too short. Aim for at least 200 characters to provide enough detail.');
+            } else {
+                score += 15;
+            }
+
+            const finalScore = Math.round(score);
+            atsScoreSpan.textContent = finalScore;
+            const circumference = 439.8; // 2 * π * r (r = 70)
+            scoreCircle.style.strokeDashoffset = circumference - (finalScore / 100) * circumference;
+            feedbackDiv.innerHTML = feedback.map(item => `<p class="text-sm text-gray-600">${item}</p>`).join('');
+            resultsDiv.classList.remove('hidden');
+            resultsDiv.scrollIntoView({ behavior: 'smooth' });
+
+            localStorage.setItem('atsScore', JSON.stringify({ score: finalScore, feedback }));
+        });
+
+        payNowBtn.addEventListener('click', () => {
+            window.location.href = 'https://short.payhero.co.ke/s/8a4CrCW8yaSWo62r48uHWx'; // Replace with your ATS Checker PayHero link for Ksh 17
+        });
+    </script>
+</body>
+</html>
